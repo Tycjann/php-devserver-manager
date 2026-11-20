@@ -1,0 +1,281 @@
+# PHP DevServer Manager
+
+[English](README.md) | **Polski**
+
+Lekkie narzędzie CLI do zarządzania wieloma lokalnymi serwerami PHP w Windows i Git Bash. Umożliwia uruchamianie serwerów niezależnie od terminala, monitorowanie ich stanu, sprawdzanie odpowiedzi HTTP oraz przeglądanie logów.
+
+> **Wersja:** [najnowsze wydanie](https://github.com/Tycjann/php-devserver-manager/releases/latest) (wersja kodu: [`VERSION`](VERSION)). Pierwsze stabilne wydanie menedżera CLI zostało przetestowane automatycznie na Windows. Wbudowany serwer PHP służy wyłącznie do developmentu i nie jest przeznaczony do obsługi ruchu produkcyjnego.
+
+## Wymagania
+
+- Windows 10/11, PowerShell 5.1+ oraz Git Bash (Git for Windows).
+- PHP CLI (`php.exe`) dostępny w **Windows PATH**, również z PowerShell.
+- Uprawnienia do uruchamiania własnych procesów. Nie potrzeba uprawnień administratora.
+- Polecenie `cygpath` dostępne w Git Bash.
+
+## Instalacja
+
+Przykładowa lokalizacja to `C:\projects\devserver`. Można wybrać dowolny katalog poza katalogiem udostępnianym przez serwer HTTP.
+
+Z Git Bash:
+
+```bash
+mkdir -p /c/projects
+cd /c/projects
+git clone https://github.com/Tycjann/php-devserver-manager.git devserver
+cd devserver
+./devserver --help
+./devserver --version
+```
+
+### Dostęp do polecenia z dowolnego katalogu (Git Bash)
+
+Żeby uruchamiać `devserver` bez prefiksu `./` z każdego katalogu projektu, dodaj katalog menedżera do zmiennej `PATH` w Git Bash. W poniższych przykładach menedżer znajduje się w `C:\projects\devserver`; dostosuj ścieżkę do własnej instalacji.
+
+1. Otwórz plik konfiguracyjny powłoki:
+
+   ```bash
+   nano ~/.bashrc
+   ```
+
+2. Dodaj na końcu pliku:
+
+   ```bash
+   export PATH="/c/projects/devserver:$PATH"
+   ```
+
+3. Zapisz plik, a następnie wczytaj ustawienia i sprawdź, czy polecenie jest dostępne:
+
+   ```bash
+   source ~/.bashrc
+   command -v devserver
+   ```
+
+   Oczekiwany wynik dla przykładowej lokalizacji: `/c/projects/devserver/devserver`.
+
+Od tej chwili można uruchamiać `devserver list` z dowolnego katalogu. Polecenia `devserver start .`, `devserver stop .` i `devserver restart .` korzystają z bieżącego katalogu, jeżeli jest on zarejestrowany jako projekt.
+
+Jeżeli pojawi się `Permission denied`, nadaj uprawnienie wykonywania launcherowi (`chmod +x /c/projects/devserver/devserver`) lub wywołuj go przez `bash /c/projects/devserver/devserver ...`.
+
+Ustawienie `~/.bashrc` dotyczy Git Bash, nie dodaje automatycznie polecenia do PowerShell ani CMD.
+
+## Pierwsze uruchomienie
+
+Rejestracja może być interaktywna. Uruchom `devserver add`, aby odpowiedzieć na pytania o nazwę, lokalizację, katalog WWW i port. Naciśnięcie Enter akceptuje proponowaną wartość. Parametry podane w poleceniu nie są ponownie zadawane. `--yes` całkowicie pomija pytania, co przydaje się agentom AI.
+
+Przykładowy kreator:
+
+```text
+$ devserver add
+Nazwa projektu [example-app]:
+Sciezka projektu [C:\projects\example-app]:
+Katalog WWW (- = bez -t) [public]: -
+Port serwera [3000]:
+```
+
+Przejdź do katalogu aplikacji (nie do `public`):
+
+```bash
+cd /c/projects/example-app
+devserver add example-app                  # port automatyczny, katalog public
+devserver start example-app
+devserver list
+```
+
+Opcje można łączyć w dowolnej kolejności:
+
+```bash
+devserver add website --dir htdocs --port 3010
+devserver add test --port 3020 --no-dir
+devserver add api --port 3030 --dir web
+devserver add example-app --path "/c/projects/example-app" --port 3000
+devserver add sample-bot --path "/c/projects/test" --no-dir --yes
+```
+
+`--path` przyjmuje ścieżkę Windows (`C:\\projects\\...`) lub Git Bash (`/c/projects/...`), także ze spacjami (w cudzysłowie). Bez `--path` wybierany jest bieżący katalog. `--dir` oraz `--no-dir` wzajemnie się wykluczają. Bez `--dir` w trybie nieinteraktywnym (`--yes`) domyślnym katalogiem jest `public`. W kreatorze można wpisać `-`, aby zrezygnować z `-t`. **Ostrzeżenie:** `--no-dir` uruchamia PHP bez `-t`, czyli udostępnia katalog projektu. Może to prowadzić do ujawnienia przez HTTP plików `.env`, kopii zapasowych lub innych poufnych plików, jeśli serwer je udostępni. Preferuj `--dir public` i stosuj `--no-dir` tylko w projektach, w których cały katalog jest bezpieczny do udostępniania. Domyślnie przydzielany jest pierwszy nieprzypisany i aktualnie wolny port od 3000.
+
+## Polecenia
+
+| Polecenie | Znaczenie |
+| --- | --- |
+| `devserver add [NAZWA] [OPCJE]` | Kreator rejestracji projektu, opcjonalnie `--path`, `--dir` / `--no-dir`, `--port`, `--yes` |
+| `devserver remove NAZWA` | Usuwa wpis z konfiguracji, nie usuwa plików |
+| `devserver start NAZWA` | Uruchamia serwer |
+| `devserver stop NAZWA` | Zatrzymuje zarządzany serwer |
+| `devserver restart NAZWA` | Zatrzymuje i ponownie uruchamia |
+| `devserver list [--json]` | Wyświetla projekty, porty, katalogi WWW, stan i uptime procesów PHP; opcjonalnie JSON |
+| `devserver status` | Alias `list`, zachowany dla zgodności ze starszymi wywołaniami |
+| `devserver check NAZWA [--path /up] [--json]` | Sprawdza HTTP metodą GET (5 s, bez przekierowań); opcjonalnie JSON |
+| `devserver logs NAZWA [--lines N] [--stdout] [--follow]` | Odczytuje log PHP (domyślnie ostatnie 30 linii stderr) |
+| `devserver edit NAZWA [OPCJE]` | Zmienia ścieżkę projektu, katalog WWW i port (serwer musi być zatrzymany) |
+| `devserver start-all` | Uruchamia wszystkie |
+| `devserver stop-all` | Zatrzymuje wszystkie zarządzane serwery |
+| `devserver help [POLECENIE]` | Pomoc |
+| `devserver -h`, `--help`, `/?` | Pomoc |
+| `devserver --version` | Wyświetla numer wersji z pliku `VERSION` |
+
+Przykładowe wyjście `devserver list`:
+
+```text
+example-app | RUNNING | uptime: 2h 34m | http://127.0.0.1:3000 | C:\projects\example-app | WWW: public
+another-app | STOPPED | uptime: - | http://127.0.0.1:3001 | C:\projects\another-app | WWW: bez -t
+```
+
+Stan RUNNING oznacza, że menedżer rozpoznaje własny proces PHP, nie że aplikacja pomyślnie odpowiada HTTP. Polecenie `status` jest nadal akceptowane jako alias, ale nie jest już osobno reklamowane w pomocy.
+
+W poleceniach `start`, `stop` i `restart` zamiast nazwy możesz użyć kropki (`.`), aby odwołać się do projektu zarejestrowanego dla bieżącego katalogu.
+
+## Uptime, diagnostyka HTTP i logi
+
+Czas działania w `list` liczony jest od uruchomienia rozpoznanego procesu PHP. Nie oznacza czasu pracy aplikacji ani czasu od ostatniego żądania. Dla procesu zatrzymanego pokazuje `-`. `status` pozostaje aliasem `list`.
+
+```bash
+devserver check example-app
+devserver check example-app --path /up
+devserver check example-app --path /login
+```
+
+`check` wysyła GET na `http://127.0.0.1:PORT/ścieżka`, bez przekierowań i z limitem 5 sekund. Wyświetla kod HTTP i czas odpowiedzi. Kody 404, 401 i 302 nadal oznaczają, że serwer odpowiedział. Kod 5xx lub błąd połączenia oznacza kod wyjścia 1. `--path` przyjmuje lokalną ścieżkę bez hosta oraz parametrów URL.
+
+```bash
+devserver logs example-app
+devserver logs example-app --lines 100
+devserver logs example-app --stdout
+devserver logs example-app --follow
+```
+
+Domyślnie odczytywany jest plik `logs/example-app.err.log` (ostatnie 30 linii). `--stdout` przełącza na stdout, a `--follow` obserwuje dalsze wpisy do Ctrl+C. Menedżer nie czyści logów automatycznie.
+
+## Edycja istniejącego projektu
+
+```bash
+devserver stop example-app
+devserver edit example-app
+devserver edit example-app --path "/c/projects/example-app" --dir public --port 3005 --yes
+devserver edit example-app --no-dir --yes
+devserver start example-app
+```
+
+Bez `--yes` polecenie `edit` pyta o niewskazane wartości i proponuje aktualne ustawienia. `--yes` używa ich bez dodatkowych pytań. `--dir` i `--no-dir` wykluczają się wzajemnie. Sprawdzane są porty, ścieżki i duplikaty katalogów. Serwer musi być zatrzymany przed edycją.
+
+## Testy automatyczne na Windows
+
+Workflow `.github/workflows/windows-smoke.yml` sprawdza składnię PowerShell oraz scenariusze integracyjne na Windows z PHP CLI. Testy pracują w odrębnym katalogu tymczasowym, nie modyfikują projektów użytkownika.
+
+```powershell
+.\tests\smoke.ps1
+```
+
+Scenariusze obejmują pomoc, rejestrację, start/stop, uptime, HTTP, logi, edycję, walidację i usuwanie projektu. Wymagany jest `php.exe` w Windows PATH. Aktualny wynik testów jest widoczny w zakładce Actions na GitHubie.
+
+## Wersje i wydania
+
+Numer wersji przechowywany jest w pliku `VERSION` i wyświetlany przez `devserver --version`. Zmiany między wersjami opisuje [`CHANGELOG.md`](CHANGELOG.md). Stosujemy numerację [SemVer](https://semver.org/lang/pl/): `MAJOR.MINOR.PATCH`. Wersja `1.0.0` oznacza pierwszy stabilny zestaw poleceń CLI. Dalsze wydania będą wersjonowane zgodnie z zasadami SemVer.
+
+Wydania oznaczamy tagami Git `vX.Y.Z` i publikujemy w GitHub Releases. Numer w `VERSION` identyfikuje kod, a tagi i wydania są publikowane osobno.
+
+## Integracja z agentami AI (Cursor, Codex, Claude Code)
+
+Menedżer działa przez CLI, więc agent AI, który ma dostęp do terminala na Windows, może nim zarządzać bez dodatkowego serwera MCP. Agent musi mieć dostęp do `devserver` w `PATH` (Git Bash) lub uruchamiać skrypt `devserver.ps1` przez PowerShell. Polecenia wykonują się **lokalnie na komputerze**, a nie w odizolowanym środowisku zdalnym. Uprawnienia do wykonywania poleceń zależą od konfiguracji agenta.
+
+### Odczyt maszynowy: `--json`
+
+```bash
+devserver list --json
+devserver status --json
+devserver check example-app --path /up --json
+```
+
+Przykład odpowiedzi `list --json` (dane przykładowe):
+
+```json
+{
+  "version": "1.1.0",
+  "projects": [
+    {
+      "name": "example-app",
+      "status": "RUNNING",
+      "running": true,
+      "pid": 12345,
+      "port": 3000,
+      "url": "http://127.0.0.1:3000",
+      "path": "C:\\projects\\example-app",
+      "document_root": "public",
+      "uptime_seconds": 123
+    }
+  ]
+}
+```
+
+Przy braku projektów `projects` jest pustą tablicą `[]`. `document_root`, `pid` i `uptime_seconds` mogą mieć wartość `null`; port i czas działania są liczbami. `status` ma wartości `RUNNING` albo `STOPPED`. Uwaga: pole `path` zawiera **lokalną ścieżkę**, dlatego nie publikuj surowych wyników zawierających prywatne lokalizacje projektów.
+
+Przykład odpowiedzi `check --json`:
+
+```json
+{
+  "name": "example-app",
+  "url": "http://127.0.0.1:3000/up",
+  "http_status": 200,
+  "response_time_ms": 14,
+  "ok": true
+}
+```
+
+Pole `ok` oznacza, że serwer odpowiedział kodem HTTP poniżej 500. Odpowiedzi 4xx nadal mają `ok: true` (serwer odpowiada, ale żądany zasób może być niedostępny). Przy kodzie 5xx narzędzie wypisuje JSON z `ok: false` i kończy działanie z kodem 1. Błędy argumentów, brak uruchomionego serwera lub problemy połączenia zwracają obiekt `{"error":{"message":"..."}}` i kod wyjścia 1. W innych trybach zachowany jest dotychczasowy format tekstowy.
+
+### Instrukcje dla agenta
+
+Wklej poniższe wskazówki do instrukcji wybranego agenta. Każdy agent korzysta z tych samych komend CLI:
+
+```text
+Do obsługi lokalnych aplikacji PHP korzystaj z PHP DevServer Manager.
+Najpierw uruchom devserver list --json; nie uruchamiaj ponownie serwera, który działa.
+Dla zarejestrowanego bieżącego projektu używaj devserver start . i devserver check . --json.
+Przy błędach analizuj devserver logs . --lines 50.
+Nie rejestruj nowych projektów, nie zatrzymuj innych serwerów i nie używaj stop-all bez zgody.
+Nie używaj --no-dir bez upewnienia się, że katalog nie zawiera plików poufnych.
+Nie traktuj HTTP 200 jako potwierdzenia poprawności funkcjonalnej aplikacji.
+Nie publikuj logów ani wyników list --json bez usunięcia prywatnych ścieżek.
+Jeśli devserver nie jest dostępny, zgłoś problem zamiast samodzielnie zmieniać konfigurację.
+```
+
+**Cursor:** umieść instrukcje w regule projektu `.cursor/rules/php-devserver.mdc` (z nagłówkiem `---\ndescription: Local PHP development servers\nalwaysApply: true\n---` i treścią instrukcji) lub w odpowiedniej regule użytkownika. Zobacz [Cursor Rules](https://docs.cursor.com/context/rules).
+
+**Codex:** dopisz instrukcje do `AGENTS.md` w katalogu głównym projektu. Zobacz [Codex: AGENTS.md](https://developers.openai.com/codex/guides/agents-md).
+
+**Claude Code:** dopisz instrukcje do `CLAUDE.md` w katalogu głównym projektu. Zobacz [Claude Code: memory](https://code.claude.com/docs/en/memory).
+
+Pliki reguł dodaje się do **projektu obsługiwanego przez agenta**, nie do katalogu menedżera. Sposób udostępniania terminala i uprawnień zależy od konkretnej instalacji edytora i agenta.
+
+## Dane i kopie zapasowe
+
+```text
+C:\projects\devserver\
+├── devserver          # launcher Git Bash
+├── devserver.ps1      # menedżer PowerShell
+├── VERSION            # numer wersji CLI
+├── CHANGELOG.md       # historia zmian
+├── README.md          # dokumentacja angielska
+├── README.pl.md       # dokumentacja polska
+├── config\
+│   └── projects.json  # lokalne ścieżki, porty, katalogi WWW
+├── logs\              # stderr/stdout
+└── runtime\           # identyfikatory procesów
+```
+
+Foldery `config/`, `logs/`, `runtime/` powstają w trakcie pracy. Repozytorium **nie śledzi** lokalnych danych. Do backupu wystarczy objąć nim w szczególności `config/projects.json`; `runtime` i `logs` można pominąć. Ścieżki projektów zapisujemy względem katalogu menedżera, gdy tylko jest to możliwe.
+
+Logi serwerów trafiają do `logs/NAZWA.err.log` i `logs/NAZWA.out.log`. Nie umieszczaj menedżera w katalogu udostępnianym przez serwer HTTP, np. `public/`.
+
+## Bezpieczeństwo i ograniczenia
+
+- Nasłuch tylko na `127.0.0.1` (bez wystawiania serwera do sieci).
+- `localhost` zwykle prowadzi do tego samego komputera, ale może wskazywać na `127.0.0.1` (IPv4) albo `::1` (IPv6), zależnie od konfiguracji systemu. Serwer nasłuchuje wyłącznie na `127.0.0.1`, dlatego dokumentacja konsekwentnie używa tego adresu.
+- `stop` sprawdza PID oraz polecenie i ścieżkę pliku wykonywalnego przed zatrzymaniem procesu; nie wykonuje `taskkill` dla wszystkich procesów `php.exe`.
+- `list` oraz jego alias `status` sprawdzają proces, a nie kondycję aplikacji. Do diagnostyki HTTP służy `check`.
+- Gdy proces zarządzany zakończy się niespodziewanie, przy ponownym uruchomieniu nadpisywane są jego dane runtime.
+- Przy uruchamianiu wielu serwerów z równoczesnymi żądaniami mogą ujawnić się ograniczenia wbudowanego serwera PHP.
+- Narzędzie nie zapewnia automatycznego startu systemowego ani centralnego panelu GUI.
+- Automatyczne testy na Windows obejmują parser PowerShell i podstawowe scenariusze integracyjne. Tryb interaktywny (`Read-Host`) warto dodatkowo przetestować w lokalnym terminalu.
+
+Licencja: [MIT](LICENSE).
