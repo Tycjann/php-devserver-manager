@@ -1,32 +1,32 @@
-# Historia zmian
+# Changelog
 
-Wersje zgodne z [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/) i [SemVer](https://semver.org/lang/pl/).
+This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
 ## [1.1.0] - 2026-11-20
 
-### Dodano
-- Opcjonalny format `--json` dla `list`, `status` i `check` z jednoznacznymi polami i kodami wyjścia.
-- Testy JSON: brak projektów, stan serwera, HTTP 200/404 oraz błędne argumenty.
-- Instrukcje integracji CLI z agentami Cursor, Codex i Claude Code w README.
+### Added
+- Optional `--json` output for `list`, `status`, and `check`, with consistent fields and exit codes.
+- JSON tests for empty project lists, server state, HTTP 200/404, and invalid arguments.
+- README instructions for integrating Cursor, Codex, and Claude Code agents.
 
-### Zgodność
-- Tekstowe odpowiedzi poleceń bez `--json` pozostają bez zmian.
+### Compatibility
+- Existing text output for commands without `--json` remains unchanged.
 
 ## [1.0.0] - 2026-11-20
 
-### Dodano
-- Zarządzanie wieloma lokalnymi serwerami PHP z Git Bash i PowerShell.
-- Rejestrację i edycję projektów (`add`, `edit`, `remove`).
-- Uruchamianie, zatrzymywanie i restartowanie serwerów oraz operacje zbiorcze.
-- Informacje o stanie procesów i czasie działania (`list`, `status`).
-- Diagnostykę HTTP (`check`) i podgląd logów (`logs`).
-- Testy integracyjne uruchamiane na Windows w GitHub Actions.
-- Polecenie `devserver --version` i wspólny plik `VERSION`.
+### Added
+- Management of multiple local PHP development servers using Git Bash and PowerShell.
+- Project registration and editing (`add`, `edit`, `remove`).
+- Starting, stopping, and restarting servers, including bulk operations.
+- Process status and uptime reporting (`list`, `status`).
+- HTTP diagnostics (`check`) and log viewing (`logs`).
+- Windows integration tests in GitHub Actions.
+- The `devserver --version` command and centralized `VERSION` file.
 
-### Bezpieczeństwo
-- Nasłuch ograniczony do `127.0.0.1`.
-- Weryfikację tożsamości procesu przed jego zatrzymaniem.
-- Ostrzeżenie o potencjalnym ujawnieniu plików przy użyciu `--no-dir`.
+### Security
+- Binding limited to `127.0.0.1`.
+- Process identity verification before stopping a managed server.
+- Warning about possible file exposure when using `--no-dir`.
 
-### Dokumentacja
-- Wstęp w języku angielskim i polskim, instrukcję konfiguracji `PATH` oraz przykłady niezwiązane z konkretnym środowiskiem.
+### Documentation
+- English and Polish project introductions, Git Bash `PATH` setup, and generic examples.
