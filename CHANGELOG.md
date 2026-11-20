@@ -2,6 +2,16 @@
 
 Wersje zgodne z [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/) i [SemVer](https://semver.org/lang/pl/).
 
+## [1.1.0] - 2026-11-20
+
+### Dodano
+- Opcjonalny format `--json` dla `list`, `status` i `check` z jednoznacznymi polami i kodami wyjścia.
+- Testy JSON: brak projektów, stan serwera, HTTP 200/404 oraz błędne argumenty.
+- Instrukcje integracji CLI z agentami Cursor, Codex i Claude Code w README.
+
+### Zgodność
+- Tekstowe odpowiedzi poleceń bez `--json` pozostają bez zmian.
+
 ## [1.0.0] - 2026-11-20
 
 ### Dodano

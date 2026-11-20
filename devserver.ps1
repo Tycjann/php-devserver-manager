@@ -1,5 +1,6 @@
 #Requires -Version 5.1
 $ErrorActionPreference = 'Stop'
+$script:JsonMode = $false
 $base = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:Version = (Get-Content -LiteralPath (Join-Path $base 'VERSION') -Raw -Encoding UTF8).Trim()
 $config = Join-Path $base 'config\projects.json'
@@ -153,7 +154,7 @@ function ValidatePort($port,$map,$exclude) {
   }
   if (!(FreePort $port)) { Fail "Port $port jest juz zajety." }
 }
-function CheckServer($name,$map,$relative) {
+function CheckServer($name,$map,$relative,$asJson) {
   $p = $map[$name]
   $proc = Managed $name $p
   if (!$proc) { Fail "Serwer $name nie jest uruchomiony przez menedzer." }
@@ -179,7 +180,17 @@ function CheckServer($name,$map,$relative) {
     }
     $code = [int]([Net.HttpWebResponse]$response).StatusCode
     $watch.Stop()
-    Write-Host "$name | HTTP $code | $($watch.ElapsedMilliseconds) ms | $uri"
+    if ($asJson) {
+      Write-Output (ConvertTo-Json -InputObject ([ordered]@{
+        name = $name
+        url = [string]$uri
+        http_status = $code
+        response_time_ms = [int64]$watch.ElapsedMilliseconds
+        ok = ($code -lt 500)
+      }) -Compress)
+    } else {
+      Write-Host "$name | HTTP $code | $($watch.ElapsedMilliseconds) ms | $uri"
+    }
     if ($code -ge 500) { exit 1 }
   } finally { if ($response) { $response.Close() } }
 }
@@ -256,7 +267,33 @@ function EditServer($name,$map,$options) {
   Save $map
   Write-Host "Zaktualizowano $name | http://127.0.0.1:$port | $path | WWW: $(if ($null -eq $root) {'bez -t'} else {$root})"
 }
-function ShowList($map) {
+function ShowList($map,$asJson) {
+  if ($asJson) {
+    $projects = @(
+      foreach ($n in @($map.Keys | Sort-Object)) {
+        $p = $map[$n]
+        $proc = Managed $n $p
+        [ordered]@{
+          name = $n
+          status = $(if ($proc) { 'RUNNING' } else { 'STOPPED' })
+          running = [bool]$proc
+          pid = $(if ($proc) { [int]$proc.ProcessId } else { $null })
+          port = [int]$p.port
+          url = "http://127.0.0.1:$($p.port)"
+          path = (FullPath $p)
+          document_root = $(if ($null -eq $p.documentRoot) { $null } else { [string]$p.documentRoot })
+          uptime_seconds = $(if ($proc -and $proc.CreationDate) {
+            try { [math]::Max(0,[int64][math]::Floor(((Get-Date) - ([datetime]$proc.CreationDate)).TotalSeconds)) } catch { $null }
+          } else { $null })
+        }
+      }
+    )
+    Write-Output (ConvertTo-Json -InputObject ([ordered]@{
+      version = $script:Version
+      projects = $projects
+    }) -Depth 6 -Compress)
+    return
+  }
   if ($map.Count -eq 0) { Write-Host 'Brak zarejestrowanych projektow.'; return }
   foreach ($n in @($map.Keys | Sort-Object)) {
     $p = $map[$n]
@@ -275,8 +312,10 @@ function Help($topic) {
     Write-Host 'devserver edit <nazwa|.> [--path <sciezka>] [--dir <katalog> | --no-dir] [--port <numer>] [--yes]'
     Write-Host 'Serwer musi byc zatrzymany. Bez --yes pytania o pozostale wartosci.'
   } elseif ($topic -eq 'check') {
-    Write-Host 'devserver check <nazwa|.> [--path /up]'
-    Write-Host 'GET z limitem 5s bez przekierowan; dowolny kod HTTP oznacza, ze serwer odpowiada (5xx = exit 1).'
+    Write-Host 'devserver check <nazwa|.> [--path /up] [--json]'
+    Write-Host 'GET z limitem 5s bez przekierowan; dowolny kod HTTP oznacza, ze serwer odpowiada (5xx = exit 1). --json = dane maszynowe.'
+  } elseif ($topic -eq 'list' -or $topic -eq 'status') {
+    Write-Host 'devserver list [--json] (status to alias list)'
   } elseif ($topic -eq 'logs') {
     Write-Host 'devserver logs <nazwa|.> [--lines 30] [--stdout] [--follow]'
     Write-Host 'Domyslnie stderr. --follow konczy sie Ctrl+C.'
@@ -290,8 +329,8 @@ function Help($topic) {
   devserver start <nazwa|.>
   devserver stop <nazwa|.>
   devserver restart <nazwa|.>
-  devserver list       (projekty, stan procesow i uptime)
-  devserver check <nazwa|.> [--path /up]
+  devserver list [--json]       (projekty, stan procesow i uptime)
+  devserver check <nazwa|.> [--path /up] [--json]
   devserver logs <nazwa|.> [--lines 30] [--stdout] [--follow]
   devserver edit <nazwa|.> [--path <sciezka>] [--dir <katalog> | --no-dir] [--port <numer>] [--yes]
   devserver start-all
@@ -392,17 +431,36 @@ try {
   }
   $map = Load
   switch ($cmd) {
-    'list' { ShowList $map }
-    'status' { ShowList $map } # zgodnosc wsteczna
-    'check' {
-      if ($tokens.Count -notin @(2,4)) { Fail 'Uzycie: devserver check <nazwa|.> [--path /up]' }
-      $n = ResolveName $tokens[1] $map
-      $uriPath = '/'
-      if ($tokens.Count -eq 4) {
-        if ($tokens[2] -ne '--path') { Fail "Nieznana opcja: $($tokens[2])" }
-        $uriPath = $tokens[3]
+    { $_ -in @('list','status') } {
+      if ($tokens.Count -gt 2 -or ($tokens.Count -eq 2 -and $tokens[1] -ne '--json')) {
+        Fail 'Uzycie: devserver list [--json]'
       }
-      CheckServer $n $map $uriPath
+      $script:JsonMode = ($tokens.Count -eq 2)
+      ShowList $map $script:JsonMode
+    }
+    'check' {
+      $script:JsonMode = ($tokens -contains '--json')
+      if ($tokens.Count -lt 2 -or $tokens[1].StartsWith('--')) { Fail 'Uzycie: devserver check <nazwa|.> [--path /up] [--json]' }
+      $uriPath = '/'
+      $hasPath = $false
+      $seenJson = $false
+      for ($i = 2; $i -lt $tokens.Count; $i++) {
+        switch ($tokens[$i]) {
+          '--json' {
+            if ($seenJson) { Fail 'Powtorzona opcja: --json' }
+            $seenJson = $true
+          }
+          '--path' {
+            if ($hasPath -or $i + 1 -ge $tokens.Count -or $tokens[$i+1].StartsWith('--')) { Fail 'Brak lub powtorzenie wartosci --path.' }
+            $i++
+            $uriPath = $tokens[$i]
+            $hasPath = $true
+          }
+          default { Fail "Nieznana opcja: $($tokens[$i])" }
+        }
+      }
+      $n = ResolveName $tokens[1] $map
+      CheckServer $n $map $uriPath $script:JsonMode
     }
     'logs' {
       if ($tokens.Count -lt 2) { Fail 'Uzycie: devserver logs <nazwa|.> [--lines 30] [--stdout] [--follow]' }
@@ -435,6 +493,10 @@ try {
     default { Fail "Nieznane polecenie '$cmd'. Uruchom: devserver help" }
   }
 } catch {
-  [Console]::Error.WriteLine('BLAD: ' + $_.Exception.Message)
+  if ($script:JsonMode) {
+    Write-Output (ConvertTo-Json -InputObject ([ordered]@{ error = [ordered]@{ message = $_.Exception.Message } }) -Compress)
+  } else {
+    [Console]::Error.WriteLine('BLAD: ' + $_.Exception.Message)
+  }
   exit 1
 }

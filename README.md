@@ -103,9 +103,9 @@ devserver add sample-bot --path "/c/projects/test" --no-dir --yes
 | `devserver start NAZWA` | Uruchamia serwer |
 | `devserver stop NAZWA` | Zatrzymuje zarządzany serwer |
 | `devserver restart NAZWA` | Zatrzymuje i ponownie uruchamia |
-| `devserver list` | Wyświetla projekty, porty, katalogi WWW, stan i uptime procesów PHP |
+| `devserver list [--json]` | Wyświetla projekty, porty, katalogi WWW, stan i uptime procesów PHP; opcjonalnie JSON |
 | `devserver status` | Alias `list`, zachowany dla zgodności ze starszymi wywołaniami |
-| `devserver check NAZWA [--path /up]` | Sprawdza HTTP metodą GET (5 s, bez przekierowań) |
+| `devserver check NAZWA [--path /up] [--json]` | Sprawdza HTTP metodą GET (5 s, bez przekierowań); opcjonalnie JSON |
 | `devserver logs NAZWA [--lines N] [--stdout] [--follow]` | Odczytuje log PHP (domyślnie ostatnie 30 linii stderr) |
 | `devserver edit NAZWA [OPCJE]` | Zmienia ścieżkę projektu, katalog WWW i port (serwer musi być zatrzymany) |
 | `devserver start-all` | Uruchamia wszystkie |
@@ -173,6 +173,79 @@ Scenariusze obejmują pomoc, rejestrację, start/stop, uptime, HTTP, logi, edycj
 Numer wersji przechowywany jest w pliku `VERSION` i wyświetlany przez `devserver --version`. Zmiany między wersjami opisuje [`CHANGELOG.md`](CHANGELOG.md). Stosujemy numerację [SemVer](https://semver.org/lang/pl/): `MAJOR.MINOR.PATCH`. Wersja `1.0.0` oznacza pierwszy stabilny zestaw poleceń CLI. Dalsze wydania będą wersjonowane zgodnie z zasadami SemVer.
 
 Wydania oznaczamy tagami Git `vX.Y.Z` i publikujemy w GitHub Releases. Numer w `VERSION` identyfikuje kod, a tagi i wydania są publikowane osobno.
+
+## Integracja z agentami AI (Cursor, Codex, Claude Code)
+
+Menedżer działa przez CLI, więc agent AI, który ma dostęp do terminala na Windows, może nim zarządzać bez dodatkowego serwera MCP. Agent musi mieć dostęp do `devserver` w `PATH` (Git Bash) lub uruchamiać skrypt `devserver.ps1` przez PowerShell. Polecenia wykonują się **lokalnie na komputerze**, a nie w odizolowanym środowisku zdalnym. Uprawnienia do wykonywania poleceń zależą od konfiguracji agenta.
+
+### Odczyt maszynowy: `--json`
+
+```bash
+devserver list --json
+devserver status --json
+devserver check example-app --path /up --json
+```
+
+Przykład odpowiedzi `list --json` (dane przykładowe):
+
+```json
+{
+  "version": "1.1.0",
+  "projects": [
+    {
+      "name": "example-app",
+      "status": "RUNNING",
+      "running": true,
+      "pid": 12345,
+      "port": 3000,
+      "url": "http://127.0.0.1:3000",
+      "path": "C:\\projects\\example-app",
+      "document_root": "public",
+      "uptime_seconds": 123
+    }
+  ]
+}
+```
+
+Przy braku projektów `projects` jest pustą tablicą `[]`. `document_root`, `pid` i `uptime_seconds` mogą mieć wartość `null`; port i czas działania są liczbami. `status` ma wartości `RUNNING` albo `STOPPED`. Uwaga: pole `path` zawiera **lokalną ścieżkę**, dlatego nie publikuj surowych wyników zawierających prywatne lokalizacje projektów.
+
+Przykład odpowiedzi `check --json`:
+
+```json
+{
+  "name": "example-app",
+  "url": "http://127.0.0.1:3000/up",
+  "http_status": 200,
+  "response_time_ms": 14,
+  "ok": true
+}
+```
+
+Pole `ok` oznacza, że serwer odpowiedział kodem HTTP poniżej 500. Odpowiedzi 4xx nadal mają `ok: true` (serwer odpowiada, ale żądany zasób może być niedostępny). Przy kodzie 5xx narzędzie wypisuje JSON z `ok: false` i kończy działanie z kodem 1. Błędy argumentów, brak uruchomionego serwera lub problemy połączenia zwracają obiekt `{"error":{"message":"..."}}` i kod wyjścia 1. W innych trybach zachowany jest dotychczasowy format tekstowy.
+
+### Instrukcje dla agenta
+
+Wklej poniższe wskazówki do instrukcji wybranego agenta. Każdy agent korzysta z tych samych komend CLI:
+
+```text
+Do obsługi lokalnych aplikacji PHP korzystaj z PHP DevServer Manager.
+Najpierw uruchom devserver list --json; nie uruchamiaj ponownie serwera, który działa.
+Dla zarejestrowanego bieżącego projektu używaj devserver start . i devserver check . --json.
+Przy błędach analizuj devserver logs . --lines 50.
+Nie rejestruj nowych projektów, nie zatrzymuj innych serwerów i nie używaj stop-all bez zgody.
+Nie używaj --no-dir bez upewnienia się, że katalog nie zawiera plików poufnych.
+Nie traktuj HTTP 200 jako potwierdzenia poprawności funkcjonalnej aplikacji.
+Nie publikuj logów ani wyników list --json bez usunięcia prywatnych ścieżek.
+Jeśli devserver nie jest dostępny, zgłoś problem zamiast samodzielnie zmieniać konfigurację.
+```
+
+**Cursor:** umieść instrukcje w regule projektu `.cursor/rules/php-devserver.mdc` (z nagłówkiem `---\ndescription: Local PHP development servers\nalwaysApply: true\n---` i treścią instrukcji) lub w odpowiedniej regule użytkownika. Zobacz [Cursor Rules](https://docs.cursor.com/context/rules).
+
+**Codex:** dopisz instrukcje do `AGENTS.md` w katalogu głównym projektu. Zobacz [Codex: AGENTS.md](https://developers.openai.com/codex/guides/agents-md).
+
+**Claude Code:** dopisz instrukcje do `CLAUDE.md` w katalogu głównym projektu. Zobacz [Claude Code: memory](https://code.claude.com/docs/en/memory).
+
+Pliki reguł dodaje się do **projektu obsługiwanego przez agenta**, nie do katalogu menedżera. Sposób udostępniania terminala i uprawnień zależy od konkretnej instalacji edytora i agenta.
 
 ## Dane i kopie zapasowe
 
