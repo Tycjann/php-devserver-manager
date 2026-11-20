@@ -1,0 +1,10 @@
+# Project-specific local state
+/config/projects.json
+/config/*.tmp
+/logs/
+/runtime/
+# Windows / IDE
+Thumbs.db
+.DS_Store
+.idea/
+.vscode/
